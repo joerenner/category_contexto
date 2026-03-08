@@ -1,3 +1,5 @@
+from itertools import combinations
+
 import requests
 
 WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql"
@@ -50,3 +52,57 @@ def _parse_entity_response(data: dict) -> list[dict]:
             "description": binding.get("personDescription", {}).get("value", ""),
         })
     return entities
+
+
+PROPERTIES_QUERY = """
+SELECT ?person ?party ?partyLabel ?position ?positionLabel WHERE {{
+  VALUES ?person {{ {entity_values} }}
+  OPTIONAL {{ ?person wdt:P102 ?party . }}
+  OPTIONAL {{ ?person wdt:P39 ?position . }}
+  SERVICE wikibase:label {{
+    bd:serviceParam wikibase:language "en" .
+  }}
+}}
+"""
+
+
+def fetch_politician_properties(entity_ids: list[str]) -> dict[str, dict]:
+    entity_values = " ".join(f"wd:{eid}" for eid in entity_ids)
+    query = PROPERTIES_QUERY.format(entity_values=entity_values)
+
+    resp = requests.get(
+        WIKIDATA_SPARQL_URL,
+        params={"query": query, "format": "json"},
+        headers={"User-Agent": "CategoryContexto/0.1 (https://github.com/joerenner/category_contexto)"},
+    )
+    resp.raise_for_status()
+    return _parse_properties_response(resp.json())
+
+
+def _parse_properties_response(data: dict) -> dict[str, dict]:
+    props: dict[str, dict] = {}
+    for binding in data["results"]["bindings"]:
+        qid = binding["person"]["value"].split("/")[-1]
+        if qid not in props:
+            props[qid] = {"parties": set(), "positions": set()}
+        if "party" in binding:
+            props[qid]["parties"].add(binding["party"]["value"].split("/")[-1])
+        if "position" in binding:
+            props[qid]["positions"].add(binding["position"]["value"].split("/")[-1])
+    return props
+
+
+def properties_to_edges(props: dict[str, dict]) -> list[tuple[str, str, str, float]]:
+    edges = []
+    entity_ids = list(props.keys())
+
+    for a, b in combinations(entity_ids, 2):
+        shared_parties = props[a]["parties"] & props[b]["parties"]
+        shared_positions = props[a]["positions"] & props[b]["positions"]
+
+        for party in shared_parties:
+            edges.append((a, b, "same_party", 1.0))
+        for position in shared_positions:
+            edges.append((a, b, "same_position", 1.0))
+
+    return edges

@@ -11,6 +11,7 @@ from category_contexto.wikidata import (
 )
 from category_contexto.graph import build_graph_from_edges, compute_graph_similarity
 from category_contexto.blurbs import build_blurbs
+from category_contexto.wiki_context import fetch_wikipedia_summaries
 from category_contexto.embeddings import generate_embeddings, compute_embedding_similarity
 from category_contexto.ranking import compute_blended_rankings
 from category_contexto.storage import RankingStore
@@ -48,8 +49,13 @@ def run_politics_pipeline(
     graph = build_graph_from_edges(all_edges)
     print(f"  {len(all_edges)} total edges")
 
+    print("Fetching Wikipedia summaries...")
+    entity_names = [e["name"] for e in entities]
+    wiki_summaries = fetch_wikipedia_summaries(entity_names)
+    print(f"  Got summaries for {len(wiki_summaries)} / {len(entities)} entities")
+
     print("Building blurbs...")
-    blurbs = build_blurbs(entities, props, party_labels, position_labels)
+    blurbs = build_blurbs(entities, props, party_labels, position_labels, wiki_summaries=wiki_summaries)
 
     print("Generating embeddings...")
     embeddings = generate_embeddings(blurbs)

@@ -3,6 +3,7 @@ def build_blurb(
     props: dict,
     party_labels: dict[str, str],
     position_labels: dict[str, str],
+    wiki_summary: str | None = None,
 ) -> str:
     parts = [entity["name"] + "."]
 
@@ -17,6 +18,9 @@ def build_blurb(
     if parties:
         parts.append("Party: " + ", ".join(parties) + ".")
 
+    if wiki_summary:
+        parts.append(wiki_summary)
+
     return " ".join(parts)
 
 
@@ -25,6 +29,7 @@ def build_blurbs(
     all_props: dict[str, dict],
     party_labels: dict[str, str],
     position_labels: dict[str, str],
+    wiki_summaries: dict[str, str] | None = None,
 ) -> dict[str, str]:
     return {
         entity["id"]: build_blurb(
@@ -32,6 +37,7 @@ def build_blurbs(
             all_props.get(entity["id"], {"parties": set(), "positions": set()}),
             party_labels,
             position_labels,
+            wiki_summary=(wiki_summaries or {}).get(entity["name"]),
         )
         for entity in entities
     }

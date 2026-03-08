@@ -1,0 +1,56 @@
+from pathlib import Path
+from functools import partial
+
+from category_contexto.config import DB_PATH
+from category_contexto.wikidata import (
+    fetch_politicians,
+    fetch_politician_properties,
+    properties_to_edges,
+)
+from category_contexto.graph import build_graph_from_edges, compute_graph_similarity
+from category_contexto.blurbs import build_blurbs
+from category_contexto.embeddings import generate_embeddings, compute_embedding_similarity
+from category_contexto.ranking import compute_blended_rankings
+from category_contexto.storage import RankingStore
+
+
+def run_politics_pipeline(
+    db_path: Path | None = None,
+    alpha: float = 0.3,
+) -> RankingStore:
+    if db_path is None:
+        db_path = DB_PATH
+
+    print("Fetching politicians from Wikidata...")
+    entities = fetch_politicians()
+    entity_ids = [e["id"] for e in entities]
+    print(f"  Found {len(entities)} entities")
+
+    print("Fetching properties...")
+    props = fetch_politician_properties(entity_ids)
+
+    print("Building graph...")
+    edges = properties_to_edges(props)
+    graph = build_graph_from_edges(edges)
+    print(f"  {len(edges)} edges")
+
+    print("Building blurbs...")
+    party_labels = {}
+    position_labels = {}
+    blurbs = build_blurbs(entities, props, party_labels, position_labels)
+
+    print("Generating embeddings...")
+    embeddings = generate_embeddings(blurbs)
+
+    print("Computing blended rankings...")
+    graph_sim_fn = partial(compute_graph_similarity, graph)
+    embed_sim_fn = partial(compute_embedding_similarity, embeddings)
+    rankings = compute_blended_rankings(entity_ids, graph_sim_fn, embed_sim_fn, alpha=alpha)
+
+    print("Saving to database...")
+    store = RankingStore(db_path)
+    entity_names = {e["id"]: e["name"] for e in entities}
+    store.save_rankings("politics", rankings, entity_names)
+    print(f"  Done. {len(entities)} entities ranked.")
+
+    return store

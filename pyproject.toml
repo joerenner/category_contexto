@@ -16,6 +16,9 @@ dev = [
     "pytest-mock>=3.10",
 ]
 
+[project.scripts]
+contexto = "category_contexto.cli:main"
+
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"

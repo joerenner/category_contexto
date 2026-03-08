@@ -6,8 +6,11 @@ from category_contexto.wikidata import (
     fetch_politicians,
     fetch_politician_properties,
     fetch_politician_eras,
+    fetch_politician_states,
+    fetch_wikipedia_titles,
     properties_to_edges,
     era_to_edges,
+    state_to_edges,
 )
 from category_contexto.graph import build_graph_from_edges, compute_graph_similarity
 from category_contexto.blurbs import build_blurbs
@@ -45,13 +48,25 @@ def run_politics_pipeline(
     era_edges = era_to_edges(eras)
     print(f"  {len(era_edges)} era-overlap edges")
 
-    all_edges = edges + era_edges
+    print("Fetching state representation...")
+    states = fetch_politician_states(entity_ids)
+    state_edges = state_to_edges(states)
+    print(f"  {len(state_edges)} same-state edges")
+
+    all_edges = edges + era_edges + state_edges
     graph = build_graph_from_edges(all_edges)
     print(f"  {len(all_edges)} total edges")
 
+    print("Fetching Wikipedia article titles...")
+    wiki_title_map = fetch_wikipedia_titles(entity_ids)
+    # Convert from {entity_id: title} to {entity_name: title}
+    entity_id_to_name = {e["id"]: e["name"] for e in entities}
+    wiki_titles = {entity_id_to_name[eid]: title for eid, title in wiki_title_map.items() if eid in entity_id_to_name}
+    print(f"  Found {len(wiki_titles)} Wikipedia article titles")
+
     print("Fetching Wikipedia summaries...")
     entity_names = [e["name"] for e in entities]
-    wiki_summaries = fetch_wikipedia_summaries(entity_names)
+    wiki_summaries = fetch_wikipedia_summaries(entity_names, wiki_titles=wiki_titles)
     print(f"  Got summaries for {len(wiki_summaries)} / {len(entities)} entities")
 
     print("Building blurbs...")

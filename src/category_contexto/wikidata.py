@@ -215,6 +215,99 @@ def _compute_total_years(periods: list[tuple[int, int]]) -> int:
     return sum(max(0, end - start) for start, end in periods)
 
 
+STATE_QUERY = """
+SELECT ?person ?state ?stateLabel WHERE {{
+  VALUES ?person {{ {entity_values} }}
+  ?person p:P39 ?statement .
+  {{
+    ?statement pq:P768 ?state .
+  }} UNION {{
+    ?statement pq:P1001 ?state .
+  }}
+  ?state wdt:P31/wdt:P279* wd:Q35657 .
+  SERVICE wikibase:label {{
+    bd:serviceParam wikibase:language "en" .
+  }}
+}}
+"""
+
+
+def fetch_politician_states(entity_ids: list[str]) -> dict[str, set[str]]:
+    """Fetch US states represented by each politician.
+
+    Returns {entity_id: {state_qid, ...}}.
+    """
+    states: dict[str, set[str]] = {}
+    for i in range(0, len(entity_ids), PROPERTIES_BATCH_SIZE):
+        batch = entity_ids[i : i + PROPERTIES_BATCH_SIZE]
+        entity_values = " ".join(f"wd:{eid}" for eid in batch)
+        query = STATE_QUERY.format(entity_values=entity_values)
+
+        resp = requests.get(
+            WIKIDATA_SPARQL_URL,
+            params={"query": query, "format": "json"},
+            headers={"User-Agent": "CategoryContexto/0.1 (https://github.com/joerenner/category_contexto)"},
+        )
+        resp.raise_for_status()
+
+        for binding in resp.json()["results"]["bindings"]:
+            qid = binding["person"]["value"].split("/")[-1]
+            state_qid = binding["state"]["value"].split("/")[-1]
+            states.setdefault(qid, set()).add(state_qid)
+
+    return states
+
+
+def state_to_edges(states: dict[str, set[str]]) -> list[tuple[str, str, str, float]]:
+    """Generate same_state edges for politicians who represented the same state."""
+    edges = []
+    entity_ids = list(states.keys())
+
+    for a, b in combinations(entity_ids, 2):
+        shared_states = states[a] & states[b]
+        if shared_states:
+            edges.append((a, b, "same_state", 0.8))
+
+    return edges
+
+
+SITELINKS_QUERY = """
+SELECT ?person ?article WHERE {{
+  VALUES ?person {{ {entity_values} }}
+  ?article schema:about ?person .
+  ?article schema:isPartOf <https://en.wikipedia.org/> .
+}}
+"""
+
+
+def fetch_wikipedia_titles(entity_ids: list[str]) -> dict[str, str]:
+    """Fetch English Wikipedia article titles for entities.
+
+    Returns {entity_id: "Wikipedia_Article_Title"}.
+    """
+    all_titles: dict[str, str] = {}
+    for i in range(0, len(entity_ids), PROPERTIES_BATCH_SIZE):
+        batch = entity_ids[i : i + PROPERTIES_BATCH_SIZE]
+        entity_values = " ".join(f"wd:{eid}" for eid in batch)
+        query = SITELINKS_QUERY.format(entity_values=entity_values)
+
+        resp = requests.get(
+            WIKIDATA_SPARQL_URL,
+            params={"query": query, "format": "json"},
+            headers={"User-Agent": "CategoryContexto/0.1 (https://github.com/joerenner/category_contexto)"},
+        )
+        resp.raise_for_status()
+
+        for binding in resp.json()["results"]["bindings"]:
+            qid = binding["person"]["value"].split("/")[-1]
+            # Extract title from URL: https://en.wikipedia.org/wiki/Joe_Biden -> Joe Biden
+            article_url = binding["article"]["value"]
+            title = article_url.split("/wiki/")[-1].replace("_", " ")
+            all_titles[qid] = title
+
+    return all_titles
+
+
 POSITION_TO_BRANCH = {
     # Executive
     "Q11696": "executive",      # President

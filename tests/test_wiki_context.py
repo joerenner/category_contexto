@@ -74,3 +74,30 @@ def test_fetch_wikipedia_missing_page():
         result = fetch_wikipedia_summaries(["Nonexistent Person"])
 
     assert len(result) == 0
+
+
+def test_fetch_with_wiki_titles():
+    """When wiki_titles are provided, use them instead of entity names."""
+    mock_response = {
+        "query": {
+            "pages": {
+                "12345": {
+                    "pageid": 12345,
+                    "title": "Jimmy Carter",
+                    "extract": "James Earl Carter Jr. was the 39th president."
+                }
+            }
+        }
+    }
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = mock_response
+    mock_resp.raise_for_status = MagicMock()
+
+    with patch("category_contexto.wiki_context.requests.get", return_value=mock_resp) as mock_get, \
+         patch("category_contexto.wiki_context.sleep"):
+        result = fetch_wikipedia_summaries(
+            ["Jimmy Carter"],
+            wiki_titles={"Jimmy Carter": "Jimmy Carter"}
+        )
+
+    assert "Jimmy Carter" in result

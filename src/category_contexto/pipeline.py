@@ -16,7 +16,7 @@ from category_contexto.graph import build_graph_from_edges, compute_graph_simila
 from category_contexto.blurbs import build_blurbs
 from category_contexto.wiki_context import fetch_wikipedia_summaries
 from category_contexto.embeddings import generate_embeddings, compute_embedding_similarity
-from category_contexto.ranking import compute_blended_rankings
+from category_contexto.ranking import compute_blended_rankings, make_recency_fn
 from category_contexto.storage import RankingStore
 
 
@@ -78,7 +78,11 @@ def run_politics_pipeline(
     print("Computing blended rankings...")
     graph_sim_fn = partial(compute_graph_similarity, graph)
     embed_sim_fn = partial(compute_embedding_similarity, embeddings)
-    rankings = compute_blended_rankings(entity_ids, graph_sim_fn, embed_sim_fn, alpha=alpha)
+    recency_fn = make_recency_fn(eras)
+    rankings = compute_blended_rankings(
+        entity_ids, graph_sim_fn, embed_sim_fn,
+        alpha=alpha, recency_fn=recency_fn, recency_weight=0.2,
+    )
 
     print("Saving to database...")
     store = RankingStore(db_path)

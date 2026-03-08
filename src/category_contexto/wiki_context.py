@@ -2,7 +2,7 @@ import requests
 from time import sleep
 
 WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
-WIKI_BATCH_SIZE = 50  # Wikipedia API limit
+WIKI_BATCH_SIZE = 20  # Wikipedia exlimit=max allows 20 extracts per request
 
 
 def fetch_wikipedia_summaries(
@@ -44,6 +44,7 @@ def fetch_wikipedia_summaries(
                     "prop": "extracts",
                     "exintro": True,
                     "explaintext": True,
+                    "exlimit": "max",
                     "format": "json",
                     "redirects": 1,
                 },

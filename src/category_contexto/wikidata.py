@@ -215,33 +215,49 @@ def _compute_total_years(periods: list[tuple[int, int]]) -> int:
     return sum(max(0, end - start) for start, end in periods)
 
 
-STATE_QUERY = """
-SELECT ?person ?state ?stateLabel WHERE {{
+DISTRICT_QUERY = """
+SELECT DISTINCT ?person ?districtLabel WHERE {{
   VALUES ?person {{ {entity_values} }}
   ?person p:P39 ?statement .
-  {{
-    ?statement pq:P768 ?state .
-  }} UNION {{
-    ?statement pq:P1001 ?state .
-  }}
-  ?state wdt:P31/wdt:P279* wd:Q35657 .
+  ?statement pq:P768 ?district .
   SERVICE wikibase:label {{
     bd:serviceParam wikibase:language "en" .
   }}
 }}
 """
 
+US_STATES = {
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
+    "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho",
+    "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana",
+    "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota",
+    "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada",
+    "New Hampshire", "New Jersey", "New Mexico", "New York",
+    "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon",
+    "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota",
+    "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
+    "West Virginia", "Wisconsin", "Wyoming",
+}
+
+
+def _extract_state_from_district(district_label: str) -> str | None:
+    """Extract US state name from a district label like 'Delaware Class 2 senate seat'."""
+    for state in sorted(US_STATES, key=len, reverse=True):
+        if district_label.startswith(state) or f" {state}" in district_label:
+            return state
+    return None
+
 
 def fetch_politician_states(entity_ids: list[str]) -> dict[str, set[str]]:
-    """Fetch US states represented by each politician.
+    """Fetch US states represented by each politician via electoral district labels.
 
-    Returns {entity_id: {state_qid, ...}}.
+    Returns {entity_id: {state_name, ...}}.
     """
     states: dict[str, set[str]] = {}
     for i in range(0, len(entity_ids), PROPERTIES_BATCH_SIZE):
         batch = entity_ids[i : i + PROPERTIES_BATCH_SIZE]
         entity_values = " ".join(f"wd:{eid}" for eid in batch)
-        query = STATE_QUERY.format(entity_values=entity_values)
+        query = DISTRICT_QUERY.format(entity_values=entity_values)
 
         resp = requests.get(
             WIKIDATA_SPARQL_URL,
@@ -252,8 +268,10 @@ def fetch_politician_states(entity_ids: list[str]) -> dict[str, set[str]]:
 
         for binding in resp.json()["results"]["bindings"]:
             qid = binding["person"]["value"].split("/")[-1]
-            state_qid = binding["state"]["value"].split("/")[-1]
-            states.setdefault(qid, set()).add(state_qid)
+            district_label = binding.get("districtLabel", {}).get("value", "")
+            state = _extract_state_from_district(district_label)
+            if state:
+                states.setdefault(qid, set()).add(state)
 
     return states
 

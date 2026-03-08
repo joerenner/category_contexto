@@ -71,9 +71,11 @@ SELECT ?person ?party ?partyLabel ?position ?positionLabel WHERE {{
 PROPERTIES_BATCH_SIZE = 200
 
 
-def fetch_politician_properties(entity_ids: list[str]) -> dict[str, dict]:
+def fetch_politician_properties(entity_ids: list[str]) -> tuple[dict[str, dict], dict[str, str], dict[str, str]]:
     """Fetch properties in batches to avoid URL length limits."""
     all_props: dict[str, dict] = {}
+    all_party_labels: dict[str, str] = {}
+    all_position_labels: dict[str, str] = {}
     for i in range(0, len(entity_ids), PROPERTIES_BATCH_SIZE):
         batch = entity_ids[i : i + PROPERTIES_BATCH_SIZE]
         entity_values = " ".join(f"wd:{eid}" for eid in batch)
@@ -85,22 +87,32 @@ def fetch_politician_properties(entity_ids: list[str]) -> dict[str, dict]:
             headers={"User-Agent": "CategoryContexto/0.1 (https://github.com/joerenner/category_contexto)"},
         )
         resp.raise_for_status()
-        batch_props = _parse_properties_response(resp.json())
+        batch_props, batch_party_labels, batch_position_labels = _parse_properties_response(resp.json())
         all_props.update(batch_props)
-    return all_props
+        all_party_labels.update(batch_party_labels)
+        all_position_labels.update(batch_position_labels)
+    return all_props, all_party_labels, all_position_labels
 
 
-def _parse_properties_response(data: dict) -> dict[str, dict]:
+def _parse_properties_response(data: dict) -> tuple[dict[str, dict], dict[str, str], dict[str, str]]:
     props: dict[str, dict] = {}
+    party_labels: dict[str, str] = {}
+    position_labels: dict[str, str] = {}
     for binding in data["results"]["bindings"]:
         qid = binding["person"]["value"].split("/")[-1]
         if qid not in props:
             props[qid] = {"parties": set(), "positions": set()}
         if "party" in binding:
-            props[qid]["parties"].add(binding["party"]["value"].split("/")[-1])
+            party_id = binding["party"]["value"].split("/")[-1]
+            props[qid]["parties"].add(party_id)
+            if "partyLabel" in binding:
+                party_labels[party_id] = binding["partyLabel"]["value"]
         if "position" in binding:
-            props[qid]["positions"].add(binding["position"]["value"].split("/")[-1])
-    return props
+            position_id = binding["position"]["value"].split("/")[-1]
+            props[qid]["positions"].add(position_id)
+            if "positionLabel" in binding:
+                position_labels[position_id] = binding["positionLabel"]["value"]
+    return props, party_labels, position_labels
 
 
 def properties_to_edges(props: dict[str, dict]) -> list[tuple[str, str, str, float]]:

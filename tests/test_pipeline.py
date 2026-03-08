@@ -22,7 +22,7 @@ def test_pipeline_end_to_end(tmp_db_path):
     }
 
     with patch("category_contexto.pipeline.fetch_politicians", return_value=mock_entities), \
-         patch("category_contexto.pipeline.fetch_politician_properties", return_value=mock_props), \
+         patch("category_contexto.pipeline.fetch_politician_properties", return_value=(mock_props, {"P1": "Party A", "P2": "Party B"}, {"O1": "Office 1", "O2": "Office 2"})), \
          patch("category_contexto.pipeline.generate_embeddings", return_value=mock_embeddings):
 
         store = run_politics_pipeline(db_path=tmp_db_path, alpha=0.5)

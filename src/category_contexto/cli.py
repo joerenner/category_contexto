@@ -97,7 +97,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     refresh_parser = subparsers.add_parser("refresh", help="Run data pipeline")
-    refresh_parser.add_argument("--alpha", type=float, default=0.3, help="Graph weight (0-1)")
+    refresh_parser.add_argument("--alpha", type=float, default=0.15, help="Graph weight (0-1)")
 
     play_parser = subparsers.add_parser("play", help="Play a round")
 

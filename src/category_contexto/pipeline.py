@@ -16,7 +16,7 @@ from category_contexto.storage import RankingStore
 
 def run_politics_pipeline(
     db_path: Path | None = None,
-    alpha: float = 0.3,
+    alpha: float = 0.15,
     max_entities: int = 500,
 ) -> RankingStore:
     if db_path is None:
@@ -31,7 +31,7 @@ def run_politics_pipeline(
     print(f"  Using {len(entities)} entities")
 
     print("Fetching properties...")
-    props = fetch_politician_properties(entity_ids)
+    props, party_labels, position_labels = fetch_politician_properties(entity_ids)
 
     print("Building graph...")
     edges = properties_to_edges(props)
@@ -39,8 +39,6 @@ def run_politics_pipeline(
     print(f"  {len(edges)} edges")
 
     print("Building blurbs...")
-    party_labels = {}
-    position_labels = {}
     blurbs = build_blurbs(entities, props, party_labels, position_labels)
 
     print("Generating embeddings...")

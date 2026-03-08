@@ -39,12 +39,15 @@ def test_fetch_politician_properties():
     entity_ids = ["Q6279", "Q76", "Q22686"]
 
     with patch("category_contexto.wikidata.requests.get", return_value=mock_resp):
-        props = fetch_politician_properties(entity_ids)
+        props, party_labels, position_labels = fetch_politician_properties(entity_ids)
 
     assert props["Q6279"]["parties"] == {"Q29552"}
     assert props["Q6279"]["positions"] == {"Q11696"}
     assert props["Q76"]["parties"] == {"Q29552"}
     assert props["Q22686"]["parties"] == {"Q29468"}
+
+    assert party_labels == {"Q29552": "Democratic Party", "Q29468": "Republican Party"}
+    assert position_labels == {"Q11696": "President of the United States"}
 
 
 def test_properties_to_edges():

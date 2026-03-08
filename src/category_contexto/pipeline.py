@@ -17,14 +17,18 @@ from category_contexto.storage import RankingStore
 def run_politics_pipeline(
     db_path: Path | None = None,
     alpha: float = 0.3,
+    max_entities: int = 500,
 ) -> RankingStore:
     if db_path is None:
         db_path = DB_PATH
 
     print("Fetching politicians from Wikidata...")
     entities = fetch_politicians()
+    if max_entities and len(entities) > max_entities:
+        print(f"  Found {len(entities)} entities, limiting to top {max_entities} by notability")
+        entities = entities[:max_entities]
     entity_ids = [e["id"] for e in entities]
-    print(f"  Found {len(entities)} entities")
+    print(f"  Using {len(entities)} entities")
 
     print("Fetching properties...")
     props = fetch_politician_properties(entity_ids)

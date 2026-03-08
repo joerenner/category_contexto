@@ -5,10 +5,11 @@ import requests
 WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql"
 
 POLITICIANS_QUERY = """
-SELECT DISTINCT ?person ?personLabel ?personDescription WHERE {
+SELECT DISTINCT ?person ?personLabel ?personDescription ?sitelinks WHERE {
   ?person wdt:P31 wd:Q5 .
   ?person wdt:P27 wd:Q30 .
   ?person wdt:P39 ?position .
+  ?person wikibase:sitelinks ?sitelinks .
   VALUES ?position {
     wd:Q11696
     wd:Q11699
@@ -20,11 +21,12 @@ SELECT DISTINCT ?person ?personLabel ?personDescription WHERE {
     wd:Q842606
     wd:Q1255921
   }
+  FILTER(?sitelinks > 15)
   SERVICE wikibase:label {
     bd:serviceParam wikibase:language "en" .
   }
 }
-ORDER BY ?personLabel
+ORDER BY DESC(?sitelinks)
 """
 
 
@@ -66,17 +68,26 @@ SELECT ?person ?party ?partyLabel ?position ?positionLabel WHERE {{
 """
 
 
-def fetch_politician_properties(entity_ids: list[str]) -> dict[str, dict]:
-    entity_values = " ".join(f"wd:{eid}" for eid in entity_ids)
-    query = PROPERTIES_QUERY.format(entity_values=entity_values)
+PROPERTIES_BATCH_SIZE = 200
 
-    resp = requests.get(
-        WIKIDATA_SPARQL_URL,
-        params={"query": query, "format": "json"},
-        headers={"User-Agent": "CategoryContexto/0.1 (https://github.com/joerenner/category_contexto)"},
-    )
-    resp.raise_for_status()
-    return _parse_properties_response(resp.json())
+
+def fetch_politician_properties(entity_ids: list[str]) -> dict[str, dict]:
+    """Fetch properties in batches to avoid URL length limits."""
+    all_props: dict[str, dict] = {}
+    for i in range(0, len(entity_ids), PROPERTIES_BATCH_SIZE):
+        batch = entity_ids[i : i + PROPERTIES_BATCH_SIZE]
+        entity_values = " ".join(f"wd:{eid}" for eid in batch)
+        query = PROPERTIES_QUERY.format(entity_values=entity_values)
+
+        resp = requests.get(
+            WIKIDATA_SPARQL_URL,
+            params={"query": query, "format": "json"},
+            headers={"User-Agent": "CategoryContexto/0.1 (https://github.com/joerenner/category_contexto)"},
+        )
+        resp.raise_for_status()
+        batch_props = _parse_properties_response(resp.json())
+        all_props.update(batch_props)
+    return all_props
 
 
 def _parse_properties_response(data: dict) -> dict[str, dict]:

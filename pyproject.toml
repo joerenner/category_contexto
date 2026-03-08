@@ -23,5 +23,10 @@ contexto = "category_contexto.cli:main"
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests that hit real APIs (deselect with '-m \"not integration\"')",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]

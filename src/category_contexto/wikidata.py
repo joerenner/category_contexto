@@ -115,6 +115,94 @@ def _parse_properties_response(data: dict) -> tuple[dict[str, dict], dict[str, s
     return props, party_labels, position_labels
 
 
+ERA_QUERY = """
+SELECT ?person ?position ?positionLabel ?start ?end WHERE {{
+  VALUES ?person {{ {entity_values} }}
+  ?person p:P39 ?statement .
+  ?statement ps:P39 ?position .
+  OPTIONAL {{ ?statement pq:P580 ?start . }}
+  OPTIONAL {{ ?statement pq:P582 ?end . }}
+  SERVICE wikibase:label {{
+    bd:serviceParam wikibase:language "en" .
+  }}
+}}
+"""
+
+
+def fetch_politician_eras(entity_ids: list[str]) -> dict[str, list[tuple[int, int]]]:
+    """Fetch service periods for entities. Returns {entity_id: [(start_year, end_year), ...]}."""
+    eras: dict[str, list[tuple[int, int]]] = {}
+    for i in range(0, len(entity_ids), PROPERTIES_BATCH_SIZE):
+        batch = entity_ids[i : i + PROPERTIES_BATCH_SIZE]
+        entity_values = " ".join(f"wd:{eid}" for eid in batch)
+        query = ERA_QUERY.format(entity_values=entity_values)
+
+        resp = requests.get(
+            WIKIDATA_SPARQL_URL,
+            params={"query": query, "format": "json"},
+            headers={"User-Agent": "CategoryContexto/0.1 (https://github.com/joerenner/category_contexto)"},
+        )
+        resp.raise_for_status()
+        batch_eras = _parse_era_response(resp.json())
+        for qid, periods in batch_eras.items():
+            eras.setdefault(qid, []).extend(periods)
+    return eras
+
+
+def _parse_era_response(data: dict) -> dict[str, list[tuple[int, int]]]:
+    eras: dict[str, list[tuple[int, int]]] = {}
+    for binding in data["results"]["bindings"]:
+        if "start" not in binding:
+            continue
+        qid = binding["person"]["value"].split("/")[-1]
+        start_year = int(binding["start"]["value"][:4])
+        if "end" in binding:
+            end_year = int(binding["end"]["value"][:4])
+        else:
+            end_year = 2026
+        eras.setdefault(qid, []).append((start_year, end_year))
+    return eras
+
+
+def era_to_edges(eras: dict[str, list[tuple[int, int]]]) -> list[tuple[str, str, str, float]]:
+    """Generate same_era edges weighted by overlap of service periods."""
+    edges = []
+    entity_ids = list(eras.keys())
+
+    for a, b in combinations(entity_ids, 2):
+        overlap = _compute_overlap_years(eras[a], eras[b])
+        if overlap <= 0:
+            continue
+        total_a = _compute_total_years(eras[a])
+        total_b = _compute_total_years(eras[b])
+        max_total = max(total_a, total_b)
+        if max_total == 0:
+            continue
+        weight = overlap / max_total
+        edges.append((a, b, "same_era", weight))
+
+    return edges
+
+
+def _compute_overlap_years(
+    periods_a: list[tuple[int, int]], periods_b: list[tuple[int, int]]
+) -> int:
+    """Compute total overlap in years between two sets of service periods."""
+    total = 0
+    for start_a, end_a in periods_a:
+        for start_b, end_b in periods_b:
+            overlap_start = max(start_a, start_b)
+            overlap_end = min(end_a, end_b)
+            if overlap_end > overlap_start:
+                total += overlap_end - overlap_start
+    return total
+
+
+def _compute_total_years(periods: list[tuple[int, int]]) -> int:
+    """Compute total years of service across all periods."""
+    return sum(max(0, end - start) for start, end in periods)
+
+
 def properties_to_edges(props: dict[str, dict]) -> list[tuple[str, str, str, float]]:
     edges = []
     entity_ids = list(props.keys())

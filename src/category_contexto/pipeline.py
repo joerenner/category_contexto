@@ -5,7 +5,9 @@ from category_contexto.config import DB_PATH
 from category_contexto.wikidata import (
     fetch_politicians,
     fetch_politician_properties,
+    fetch_politician_eras,
     properties_to_edges,
+    era_to_edges,
 )
 from category_contexto.graph import build_graph_from_edges, compute_graph_similarity
 from category_contexto.blurbs import build_blurbs
@@ -35,8 +37,16 @@ def run_politics_pipeline(
 
     print("Building graph...")
     edges = properties_to_edges(props)
-    graph = build_graph_from_edges(edges)
-    print(f"  {len(edges)} edges")
+    print(f"  {len(edges)} property edges")
+
+    print("Fetching service eras...")
+    eras = fetch_politician_eras(entity_ids)
+    era_edges = era_to_edges(eras)
+    print(f"  {len(era_edges)} era-overlap edges")
+
+    all_edges = edges + era_edges
+    graph = build_graph_from_edges(all_edges)
+    print(f"  {len(all_edges)} total edges")
 
     print("Building blurbs...")
     blurbs = build_blurbs(entities, props, party_labels, position_labels)

@@ -149,15 +149,27 @@ def fetch_politician_eras(entity_ids: list[str]) -> dict[str, list[tuple[int, in
     return eras
 
 
+def _parse_year(value: str) -> int | None:
+    """Extract year from a Wikidata date value, returning None if unparseable."""
+    try:
+        return int(value[:4])
+    except (ValueError, IndexError):
+        return None
+
+
 def _parse_era_response(data: dict) -> dict[str, list[tuple[int, int]]]:
     eras: dict[str, list[tuple[int, int]]] = {}
     for binding in data["results"]["bindings"]:
         if "start" not in binding:
             continue
+        start_year = _parse_year(binding["start"]["value"])
+        if start_year is None:
+            continue
         qid = binding["person"]["value"].split("/")[-1]
-        start_year = int(binding["start"]["value"][:4])
         if "end" in binding:
-            end_year = int(binding["end"]["value"][:4])
+            end_year = _parse_year(binding["end"]["value"])
+            if end_year is None:
+                end_year = 2026
         else:
             end_year = 2026
         eras.setdefault(qid, []).append((start_year, end_year))

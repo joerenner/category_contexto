@@ -215,6 +215,22 @@ def _compute_total_years(periods: list[tuple[int, int]]) -> int:
     return sum(max(0, end - start) for start, end in periods)
 
 
+POSITION_TO_BRANCH = {
+    # Executive
+    "Q11696": "executive",      # President
+    "Q11699": "executive",      # Vice President
+    "Q311360": "executive",     # Secretary of State
+    "Q14211": "executive",      # Secretary of Defense
+    "Q842606": "executive",     # Attorney General
+    "Q1255921": "executive",    # Secretary of Treasury
+    # Legislative
+    "Q4416090": "legislative",  # US Senator
+    "Q13218630": "legislative", # US House Representative
+    # State executive
+    "Q889821": "state_executive", # Governor
+}
+
+
 def properties_to_edges(props: dict[str, dict]) -> list[tuple[str, str, str, float]]:
     edges = []
     entity_ids = list(props.keys())
@@ -227,5 +243,12 @@ def properties_to_edges(props: dict[str, dict]) -> list[tuple[str, str, str, flo
             edges.append((a, b, "same_party", 1.0))
         for position in shared_positions:
             edges.append((a, b, "same_position", 1.0))
+
+        # same_branch: check if any positions map to the same branch
+        branches_a = {POSITION_TO_BRANCH[p] for p in props[a]["positions"] if p in POSITION_TO_BRANCH}
+        branches_b = {POSITION_TO_BRANCH[p] for p in props[b]["positions"] if p in POSITION_TO_BRANCH}
+        shared_branches = branches_a & branches_b
+        if shared_branches and not shared_positions:
+            edges.append((a, b, "same_branch", 0.5))
 
     return edges
